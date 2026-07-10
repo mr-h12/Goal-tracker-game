@@ -12,16 +12,18 @@
 
 import type { GameRepository } from './types';
 import { levelFromXp, titleForLevel } from '../leveling';
-
-
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-);
+import { supabase } from '../supabaseClient';
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+// Auth-specific lookup: maps the logged-in Supabase Auth session to the
+// matching player row. Not part of GameRepository — that interface is
+// game-data only, this is identity resolution.
+export async function getUserByAuthId(authUserId: string) {
+  const { data, error } = await supabase.from('users').select('*').eq('auth_user_id', authUserId).maybeSingle();
+  if (error) throw error;
+  return data ? mapUser(data) : undefined;
+}
 
 export const supabaseRepository: GameRepository = {
   async getUsers() {
@@ -94,6 +96,15 @@ export const supabaseRepository: GameRepository = {
     return data.map(mapCompletion);
   },
 
+  async getCompletionsInRange(userId, from, to) {
+    const { data, error } = await supabase
+      .from('task_completions').select('*')
+      .eq('user_id', userId).gte('date', from).lte('date', to)
+      .order('date');
+    if (error) throw error;
+    return data.map(mapCompletion);
+  },
+
   async completeTask(taskId, userId, status, date = today()) {
     const { data: task } = await supabase.from('tasks').select('*').eq('id', taskId).single();
     const xpEarned = status === 'done' ? task.xp_reward : 0;
@@ -129,7 +140,11 @@ export const supabaseRepository: GameRepository = {
   },
 
   async getLeaderboard(range) {
-    const since = startOfRange(range);
+    const since = range === 'season'
+      ? await seasonStart()
+      : range === 'all-time'
+        ? new Date(0).toISOString()
+        : startOfRange(range);
     const { data: users } = await supabase.from('users').select('id, username');
     const { data: history } = await supabase
       .from('xp_history').select('user_id, amount').gte('created_at', since);
@@ -139,7 +154,38 @@ export const supabaseRepository: GameRepository = {
       .map((u) => ({ userId: u.id, username: u.username, xp: totals.get(u.id) ?? 0 }))
       .sort((a, b) => b.xp - a.xp);
   },
+
+  async getActiveSeason() {
+    const { data, error } = await supabase
+      .from('seasons').select('*').eq('is_active', true).order('number', { ascending: false }).maybeSingle();
+    if (error) throw error;
+    return data ? mapSeason(data) : null;
+  },
+
+  async getDailyWinner(date) {
+    const { data, error } = await supabase
+      .from('daily_winners').select('date, user_id, xp').eq('date', date).maybeSingle();
+    if (error) throw error;
+    if (!data) return { date, userId: null, username: null, xp: 0 };
+    const { data: user } = await supabase.from('users').select('username').eq('id', data.user_id).maybeSingle();
+    return { date, userId: data.user_id as any, username: user?.username ?? null, xp: data.xp };
+  },
+
+  async awardDailyWinner(date) {
+    const { data, error } = await supabase.rpc('award_daily_winner', { p_date: date });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row?.winner_id) return { date, userId: null, username: null, xp: 0 };
+    const { data: user } = await supabase.from('users').select('username').eq('id', row.winner_id).maybeSingle();
+    return { date, userId: row.winner_id as any, username: user?.username ?? null, xp: row.winner_xp };
+  },
 };
+
+async function seasonStart() {
+  const { data } = await supabase.from('seasons').select('start_date').eq('is_active', true)
+    .order('number', { ascending: false }).maybeSingle();
+  return data ? `${data.start_date}T00:00:00.000Z` : new Date(0).toISOString();
+}
 
 function startOfRange(range: 'daily' | 'weekly' | 'monthly') {
   const now = new Date();
@@ -149,7 +195,15 @@ function startOfRange(range: 'daily' | 'weekly' | 'monthly') {
   return now.toISOString();
 }
 
-const mapUser = (r: any) => ({ id: r.id, username: r.username, avatar: r.avatar, title: r.title, level: r.level, xp: r.xp, createdAt: r.created_at });
+const mapUser = (r: any) => ({
+  id: r.id, username: r.username, avatar: r.avatar, title: r.title, level: r.level, xp: r.xp,
+  createdAt: r.created_at, authUserId: r.auth_user_id ?? undefined,
+  currentStreak: r.current_streak ?? 0, longestStreak: r.longest_streak ?? 0,
+});
+const mapSeason = (r: any) => ({
+  id: r.id, number: r.number, name: r.name, startDate: r.start_date, endDate: r.end_date,
+  isActive: r.is_active, championId: r.champion_id ?? null, finalizedAt: r.finalized_at ?? null,
+});
 const mapTask = (r: any) => ({ id: r.id, ownerId: r.owner_id, name: r.name, category: r.category, icon: r.icon, xpReward: r.xp_reward, active: r.active });
 const mapCompletion = (r: any) => ({ id: r.id, taskId: r.task_id, userId: r.user_id, date: r.date, status: r.status, xpEarned: r.xp_earned });
 const mapXp = (r: any) => ({ id: r.id, userId: r.user_id, amount: r.amount, reason: r.reason, createdAt: r.created_at });

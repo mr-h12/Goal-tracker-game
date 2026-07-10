@@ -1,6 +1,7 @@
 import type {
   Achievement,
   PlayerId,
+  Season,
   Task,
   TaskCompletion,
   User,
@@ -8,9 +9,25 @@ import type {
 } from '../../types';
 import { levelFromXp, titleForLevel } from '../leveling';
 import { SEED_USERS, seedTasks } from './seed';
-import type { GameRepository } from './types';
+import type { GameRepository, LeaderboardRange } from './types';
 
 const STORAGE_KEY = 'quest-duo:v1';
+const SEASON: Season = {
+  id: 'season-1',
+  number: 1,
+  name: 'Season 1',
+  startDate: new Date().toISOString().slice(0, 10),
+  endDate: '2026-09-25',
+  isActive: true,
+  championId: null,
+  finalizedAt: null,
+};
+
+interface DailyWinnerRow {
+  date: string;
+  userId: PlayerId;
+  xp: number;
+}
 
 interface Db {
   users: User[];
@@ -18,6 +35,43 @@ interface Db {
   completions: TaskCompletion[];
   xpHistory: XpHistoryEntry[];
   achievements: Achievement[];
+  dailyWinners?: DailyWinnerRow[];
+}
+
+function computeDayWinner(db: Db, date: string): { id: PlayerId; username: string; xp: number } | null {
+  const totals = new Map<PlayerId, number>();
+  for (const h of db.xpHistory) {
+    if (h.createdAt.slice(0, 10) === date && h.amount > 0 && !h.reason.startsWith('Daily Winner Bonus')) {
+      totals.set(h.userId, (totals.get(h.userId) ?? 0) + h.amount);
+    }
+  }
+  let winner: { id: PlayerId; username: string; xp: number } | null = null;
+  for (const u of db.users) {
+    const xp = totals.get(u.id) ?? 0;
+    if (xp > 0 && (!winner || xp > winner.xp)) winner = { id: u.id, username: u.username, xp };
+  }
+  return winner;
+}
+
+function recomputeStreak(db: Db, userId: PlayerId) {
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) return;
+  const activeDays = [...new Set(
+    db.completions.filter((c) => c.userId === userId && c.status === 'done').map((c) => c.date),
+  )].sort();
+  let run = 0;
+  let best = 0;
+  let prev: string | null = null;
+  for (const d of activeDays) {
+    const isConsecutive = prev !== null && new Date(d).getTime() - new Date(prev).getTime() === 86400000;
+    run = isConsecutive ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = d;
+  }
+  const today = todayIso();
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  user.currentStreak = prev === today || prev === yesterday ? run : 0;
+  user.longestStreak = Math.max(user.longestStreak, best);
 }
 
 function loadDb(): Db {
@@ -46,7 +100,7 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function startOfRange(range: 'daily' | 'weekly' | 'monthly'): Date {
+function startOfRange(range: LeaderboardRange): Date {
   const now = new Date();
   if (range === 'daily') {
     now.setHours(0, 0, 0, 0);
@@ -59,6 +113,8 @@ function startOfRange(range: 'daily' | 'weekly' | 'monthly'): Date {
     now.setHours(0, 0, 0, 0);
     return now;
   }
+  if (range === 'all-time') return new Date(0);
+  if (range === 'season') return new Date(SEASON.startDate);
   now.setDate(1);
   now.setHours(0, 0, 0, 0);
   return now;
@@ -125,6 +181,12 @@ export const localRepository: GameRepository = {
     return loadDb().completions.filter((c) => c.date === date);
   },
 
+  async getCompletionsInRange(userId, from, to) {
+    return loadDb()
+      .completions.filter((c) => c.userId === userId && c.date >= from && c.date <= to)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  },
+
   async completeTask(taskId, userId, status, date = todayIso()) {
     const db = loadDb();
     const task = db.tasks.find((t) => t.id === taskId);
@@ -148,6 +210,7 @@ export const localRepository: GameRepository = {
         xpEarned,
       });
     }
+    recomputeStreak(db, userId);
     saveDb(db);
 
     if (status === 'done') {
@@ -196,5 +259,43 @@ export const localRepository: GameRepository = {
     return db.users
       .map((u) => ({ userId: u.id, username: u.username, xp: totals.get(u.id) ?? 0 }))
       .sort((a, b) => b.xp - a.xp);
+  },
+
+  async getActiveSeason() {
+    return SEASON;
+  },
+
+  async getDailyWinner(date) {
+    const db = loadDb();
+    const recorded = (db.dailyWinners ?? []).find((w) => w.date === date);
+    if (recorded) {
+      const u = db.users.find((x) => x.id === recorded.userId);
+      return { date, userId: recorded.userId, username: u?.username ?? null, xp: recorded.xp };
+    }
+    const winner = computeDayWinner(db, date);
+    return {
+      date,
+      userId: winner?.id ?? null,
+      username: winner?.username ?? null,
+      xp: winner?.xp ?? 0,
+    };
+  },
+
+  async awardDailyWinner(date) {
+    const db = loadDb();
+    db.dailyWinners = db.dailyWinners ?? [];
+    const existing = db.dailyWinners.find((w) => w.date === date);
+    if (existing) {
+      const u = db.users.find((x) => x.id === existing.userId);
+      return { date, userId: existing.userId, username: u?.username ?? null, xp: existing.xp };
+    }
+    const winner = computeDayWinner(db, date);
+    if (!winner) return { date, userId: null, username: null, xp: 0 };
+
+    db.dailyWinners.push({ date, userId: winner.id, xp: winner.xp });
+    saveDb(db);
+    await localRepository.addXp(winner.id, 50, `Daily Winner Bonus (${date})`);
+    await localRepository.unlockAchievement(winner.id, 'Daily Winner');
+    return { date, userId: winner.id, username: winner.username, xp: winner.xp };
   },
 };

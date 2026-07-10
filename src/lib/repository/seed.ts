@@ -9,6 +9,8 @@ export const SEED_USERS: User[] = [
     level: 1,
     xp: 0,
     createdAt: new Date().toISOString(),
+    currentStreak: 0,
+    longestStreak: 0,
   },
   {
     id: 'hasabo',
@@ -18,6 +20,8 @@ export const SEED_USERS: User[] = [
     level: 1,
     xp: 0,
     createdAt: new Date().toISOString(),
+    currentStreak: 0,
+    longestStreak: 0,
   },
 ];
 

@@ -3,12 +3,13 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { NavBar } from './components/NavBar';
 import { LevelUpModal } from './components/LevelUpModal';
 import { useGameStore } from './store/useGameStore';
-import { ProfileSelect } from './pages/ProfileSelect';
+import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Character } from './pages/Character';
 import { Quests } from './pages/Quests';
 import { Leaderboard } from './pages/Leaderboard';
 import { Manage } from './pages/Manage';
+import { Stats } from './pages/Stats';
 
 function App() {
   const init = useGameStore((s) => s.init);
@@ -28,7 +29,7 @@ function App() {
   }
 
   if (!currentPlayer) {
-    return <ProfileSelect />;
+    return <Login />;
   }
 
   return (
@@ -39,6 +40,7 @@ function App() {
           <Route path="/character" element={<Character />} />
           <Route path="/quests" element={<Quests />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/stats" element={<Stats />} />
           <Route path="/manage" element={<Manage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

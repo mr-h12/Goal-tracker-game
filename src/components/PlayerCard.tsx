@@ -16,7 +16,7 @@ export function PlayerCard({ user, tasks, completions }: Props) {
   return (
     <div className="glow rounded-2xl border border-panel-border bg-panel p-4">
       <div className="flex items-center gap-3">
-        <Avatar avatar={user.avatar} />
+        <Avatar avatar={user.avatar} level={level} />
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <span className="text-lg font-bold">
@@ -26,6 +26,10 @@ export function PlayerCard({ user, tasks, completions }: Props) {
           <div className="text-xs text-neutral-400">
             Level {level} · {titleForLevel(level)}
           </div>
+        </div>
+        <div className="flex flex-col items-end gap-0.5 text-xs">
+          <span className="font-semibold text-neon" title="Current streak">🔥 {user.currentStreak}</span>
+          <span className="text-neutral-400" title="Best streak">🏆 {user.longestStreak}</span>
         </div>
       </div>
 

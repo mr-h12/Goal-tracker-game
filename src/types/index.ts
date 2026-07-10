@@ -8,6 +8,27 @@ export interface User {
   level: number;
   xp: number;
   createdAt: string;
+  authUserId?: string;
+  currentStreak: number;
+  longestStreak: number;
+}
+
+export interface Season {
+  id: string;
+  number: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  championId: PlayerId | null;
+  finalizedAt: string | null;
+}
+
+export interface DailyWinner {
+  date: string;
+  userId: PlayerId | null;
+  username: string | null;
+  xp: number;
 }
 
 export interface Task {

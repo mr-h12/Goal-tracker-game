@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
+import { NotificationSettings } from '../components/NotificationSettings';
 import type { Task } from '../types';
 
 const CATEGORIES = ['Faith', 'Health', 'Work', 'Life'];
@@ -73,6 +74,8 @@ export function Manage() {
           <TaskRow key={task.id} task={task} onUpdate={updateTask} onDelete={deleteTask} />
         ))}
       </ul>
+
+      <NotificationSettings />
     </div>
   );
 }

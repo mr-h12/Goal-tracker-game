@@ -34,7 +34,7 @@ export function Character() {
   return (
     <div className="flex flex-col gap-4 p-4">
       <div className="glow flex flex-col items-center gap-2 rounded-2xl border border-panel-border bg-panel p-6">
-        <Avatar avatar={user.avatar} size={96} />
+        <Avatar avatar={user.avatar} level={level} size={96} />
         <div className="text-2xl font-black">{user.username}</div>
         <div className="text-sm text-neutral-400">
           Level {level} · {titleForLevel(level)}
