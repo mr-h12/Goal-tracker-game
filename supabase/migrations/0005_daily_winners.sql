@@ -118,6 +118,7 @@ end $$;
 
 -- Backfill winners table for days already paid out (idempotent).
 insert into public.daily_winners (date, user_id, xp)
+select * from (
 select d.day,
        (select h.user_id from public.xp_history h
         where h.created_at::date = d.day and h.amount > 0 and h.reason not ilike 'Daily Winner Bonus%'
@@ -126,4 +127,6 @@ select d.day,
         where h.created_at::date = d.day and h.amount > 0 and h.reason not ilike 'Daily Winner Bonus%'
         group by h.user_id order by sum(h.amount) desc, h.user_id limit 1)
 from (values (date '2026-07-08'), (date '2026-07-09')) as d(day)
+) w(day, user_id, xp)
+where w.user_id is not null  -- fresh DB has no history to backfill
 on conflict (date) do nothing;
