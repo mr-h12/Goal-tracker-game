@@ -46,8 +46,8 @@ export async function sendNotification(
 
     await registration.showNotification(payload.title, {
       body: payload.body,
-      icon: payload.icon ?? '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: payload.icon ?? import.meta.env.BASE_URL + 'icons/icon-192.png',
+      badge: import.meta.env.BASE_URL + 'icons/icon-192.png',
       tag: payload.tag ?? type,
       data: { type, ...payload.data },
       requireInteraction: type === 'reminder',
