@@ -1,0 +1,9 @@
+project_id = "ytplqsblpytvzrigpmua"
+
+[auth]
+site_url = "https://mr-h12.github.io/Goal-tracker-game/"
+additional_redirect_urls = ["https://mr-h12.github.io/Goal-tracker-game/**"]
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false

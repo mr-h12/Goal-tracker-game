@@ -9,11 +9,24 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [signup, setSignup] = useState(false);
+  const [player, setPlayer] = useState<'mohanad' | 'hasabo'>('hasabo');
+  const [signupError, setSignupError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    await signIn(email.trim(), password);
+    setSignupError(null);
+    if (signup) {
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { data: { player } },
+      });
+      if (error) setSignupError(error.message);
+    } else {
+      await signIn(email.trim(), password);
+    }
     setSubmitting(false);
   };
 
@@ -49,7 +62,7 @@ export function Login() {
           <input
             type="password"
             required
-            autoComplete="current-password"
+            autoComplete={signup ? "new-password" : "current-password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg border border-panel-border bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-neon"
@@ -57,9 +70,27 @@ export function Login() {
           />
         </div>
 
-        {authError && (
+        {signup && (
+          <div className="glow rounded-2xl border border-panel-border bg-panel p-4">
+            <label className="mb-1 block text-xs text-neutral-400">Player</label>
+            <div className="flex gap-2">
+              {(['mohanad', 'hasabo'] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPlayer(p)}
+                  className={`flex-1 rounded-lg border py-2 text-sm font-bold uppercase ${player === p ? 'border-neon text-neon' : 'border-panel-border text-neutral-500'}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(authError || signupError) && (
           <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-            {authError}
+            {signup ? signupError : authError}
           </div>
         )}
 
@@ -68,7 +99,15 @@ export function Login() {
           disabled={submitting}
           className="glow rounded-2xl border border-neon bg-neon/10 py-3 text-center font-bold text-neon transition active:scale-95 disabled:opacity-50"
         >
-          {submitting ? 'Entering…' : 'Enter the Realm'}
+          {submitting ? 'Entering…' : signup ? 'Create Account' : 'Enter the Realm'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSignup((v) => !v)}
+          className="text-center text-xs text-neutral-400 underline underline-offset-2"
+        >
+          {signup ? 'Have an account? Sign in' : 'New here? Create account'}
         </button>
 
         <button
